@@ -1048,9 +1048,9 @@ The function of `param2` is determined by `paramtype2` in node definition.
             * The height of the 'plantlike' section is stored in `param2`.
             * The height is (`param2` / 16) nodes.
 * `paramtype2 = "degrotate"`
-    * Only valid for "plantlike" drawtype. The rotation of the node is stored in
-      `param2`.
-    * Values range 0 - 179. The value stored in `param2` is multiplied by two to
+    * Valid for `plantlike` and `mesh` drawtypes. The rotation of the node is
+      stored in `param2`.
+    * Values range 0–239. The value stored in `param2` is multiplied by 1.5 to
       get the actual rotation in degrees of the node.
 * `paramtype2 = "meshoptions"`
     * Only valid for "plantlike" drawtype. `param2` encodes the shape and
@@ -1088,6 +1088,11 @@ The function of `param2` is determined by `paramtype2` in node definition.
     * `param2` values 0-63 define 64 levels of internal liquid, 0 being empty
       and 63 being full.
     * Liquid texture is defined using `special_tiles = {"modname_tilename.png"}`
+* `paramtype2 = "colordegrotate"`
+    * Same as `degrotate`, but with colors.
+    * The first (most-significant) three bits of `param2` tells which color
+      is picked from the palette. The palette should have 8 pixels.
+    * Remaining 5 bits store rotation in range 0–23 (i.e. in 15° steps)
 * `paramtype2 = "none"`
     * `param2` will not be used by the engine and can be used to store
       an arbitrary value
@@ -1725,7 +1730,15 @@ to games.
     * `3`: the node always gets the digging time 0 seconds (torch)
 * `disable_jump`: Player (and possibly other things) cannot jump from node
   or if their feet are in the node. Note: not supported for `new_move = false`
-* `fall_damage_add_percent`: damage speed = `speed * (1 + value/100)`
+* `fall_damage_add_percent`: modifies the fall damage suffered when hitting
+  the top of this node. There's also an armor group with the same name.
+  The final player damage is determined by the following formula:
+    damage =
+      collision speed
+      * ((node_fall_damage_add_percent   + 100) / 100) -- node group
+      * ((player_fall_damage_add_percent + 100) / 100) -- player armor group
+      - (14)                                           -- constant tolerance
+  Negative damage values are discarded as no damage.
 * `falling_node`: if there is no walkable block under the node it will fall
 * `float`: the node will not fall through liquids
 * `level`: Can be used to give an additional sense of progression in the game.
@@ -1745,12 +1758,15 @@ to games.
   `"toolrepair"` crafting recipe
 
 
-### `ObjectRef` groups
+### `ObjectRef` armor groups
 
 * `immortal`: Skips all damage and breath handling for an object. This group
   will also hide the integrated HUD status bars for players. It is
   automatically set to all players when damage is disabled on the server and
   cannot be reset (subject to change).
+* `fall_damage_add_percent`: Modifies the fall damage suffered by players
+  when they hit the ground. It is analog to the node group with the same
+  name. See the node group above for the exact calculation.
 * `punch_operable`: For entities; disables the regular damage mechanism for
   players punching it by hand or a non-tool item, so that it can do something
   else than take damage.
@@ -3150,6 +3166,16 @@ For the following functions, `v`, `v1`, `v2` are vectors,
     * Returns a vector.
     * A copy of `a` if `a` is a vector.
     * `{x = a, y = b, z = c}`, if all of `a`, `b`, `c` are defined numbers.
+* `vector.from_string(s[, init])`:
+    * Returns `v, np`, where `v` is a vector read from the given string `s` and
+      `np` is the next position in the string after the vector.
+    * Returns `nil` on failure.
+    * `s`: Has to begin with a substring of the form `"(x, y, z)"`. Additional
+           spaces, leaving away commas and adding an additional comma to the end
+           is allowed.
+    * `init`: If given starts looking for the vector at this string index.
+* `vector.to_string(v)`:
+    * Returns a string of the form `"(x, y, z)"`.
 * `vector.direction(p1, p2)`:
     * Returns a vector of length 1 with direction `p1` to `p2`.
     * If `p1` and `p2` are identical, returns `{x = 0, y = 0, z = 0}`.
@@ -3164,6 +3190,7 @@ For the following functions, `v`, `v1`, `v2` are vectors,
     * Returns a vector, each dimension rounded down.
 * `vector.round(v)`:
     * Returns a vector, each dimension rounded to nearest integer.
+    * At a multiple of 0.5, rounds away from zero.
 * `vector.apply(v, func)`:
     * Returns a vector where the function `func` has been applied to each
       component.
@@ -3238,6 +3265,8 @@ Helper functions
     * If the absolute value of `x` is within the `tolerance` or `x` is NaN,
       `0` is returned.
 * `math.factorial(x)`: returns the factorial of `x`
+* `math.round(x)`: Returns `x` rounded to the nearest integer.
+    * At a multiple of 0.5, rounds away from zero.
 * `string.split(str, separator, include_empty, max_splits, sep_is_pattern)`
     * `separator`: string, default: `","`
     * `include_empty`: boolean, default: `false`
@@ -4398,6 +4427,9 @@ Utilities
           direct_velocity_on_players = true,
           -- nodedef's use_texture_alpha accepts new string modes (5.4.0)
           use_texture_alpha_string_modes = true,
+          -- degrotate param2 rotates in units of 1.5° instead of 2°
+          -- thus changing the range of values from 0-179 to 0-240 (5.5.0)
+          degrotate_240_steps = true,
       }
 
 * `minetest.has_feature(arg)`: returns `boolean, missing_features`
@@ -4660,6 +4692,7 @@ Call these functions only at load time!
     * `cheat`: `{type=<cheat_type>}`, where `<cheat_type>` is one of:
         * `moved_too_fast`
         * `interacted_too_far`
+        * `interacted_with_self`
         * `interacted_while_dead`
         * `finished_unknown_dig`
         * `dug_unbreakable`
@@ -4900,7 +4933,7 @@ Environment access
     * Punch node with the same effects that a player would cause
 * `minetest.spawn_falling_node(pos)`
     * Change node into falling node
-    * Returns `true` if successful, `false` on failure
+    * Returns `true` and the ObjectRef of the spawned entity if successful, `false` on failure
 
 * `minetest.find_nodes_with_meta(pos1, pos2)`
     * Get a table of positions of nodes that have metadata within a region
@@ -8388,7 +8421,7 @@ Used by `HTTPApiTable.fetch` and `HTTPApiTable.fetch_async`.
         url = "http://example.org",
 
         timeout = 10,
-        -- Timeout for connection in seconds. Default is 3 seconds.
+        -- Timeout for request to be completed in seconds. Default depends on engine settings.
 
         method = "GET", "POST", "PUT" or "DELETE"
         -- The http method to use. Defaults to "GET".

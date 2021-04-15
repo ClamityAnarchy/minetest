@@ -9,7 +9,7 @@ stages:
   - deploy
 
 variables:
-  IRRLICHT_TAG: "1.9.0mt0"
+  IRRLICHT_TAG: "1.9.0mt1"
   MINETEST_GAME_REPO: "https://github.com/minetest/minetest_game.git"
   CONTAINER_IMAGE: registry.gitlab.com/$CI_PROJECT_PATH
 
@@ -26,7 +26,7 @@ variables:
     - cd ..
     - mkdir cmakebuild
     - cd cmakebuild
-    - cmake -DIRRLICHT_LIBRARY=$PWD/../irrlicht/lib/Linux/libIrrlicht.a -DIRRLICHT_INCLUDE_DIR=$PWD/../irrlicht/include -DCMAKE_INSTALL_PREFIX=../artifact/minetest/usr/ -DCMAKE_BUILD_TYPE=Release -DRUN_IN_PLACE=FALSE -DENABLE_GETTEXT=TRUE -DBUILD_SERVER=TRUE ..
+    - cmake -DIRRLICHT_LIBRARY=$PWD/../irrlicht/lib/Linux/libIrrlichtMt.a -DIRRLICHT_INCLUDE_DIR=$PWD/../irrlicht/include -DCMAKE_INSTALL_PREFIX=../artifact/minetest/usr/ -DCMAKE_BUILD_TYPE=Release -DRUN_IN_PLACE=FALSE -DENABLE_GETTEXT=TRUE -DBUILD_SERVER=TRUE ..
     - make -j2
     - make install
   artifacts:

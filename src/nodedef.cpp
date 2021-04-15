@@ -944,7 +944,8 @@ void ContentFeatures::updateTextures(ITextureSource *tsrc, IShaderSource *shdsrc
 
 	if (param_type_2 == CPT2_COLOR ||
 			param_type_2 == CPT2_COLORED_FACEDIR ||
-			param_type_2 == CPT2_COLORED_WALLMOUNTED)
+			param_type_2 == CPT2_COLORED_WALLMOUNTED ||
+			param_type_2 == CPT2_COLORED_DEGROTATE)
 		palette = tsrc->getPalette(palette_name);
 
 	if (drawtype == NDT_MESH && !mesh.empty()) {
@@ -1543,10 +1544,10 @@ void NodeDefManager::deSerialize(std::istream &is)
 }
 
 
-void NodeDefManager::addNameIdMapping(content_t i, std::string name)
+void NodeDefManager::addNameIdMapping(content_t i, const std::string &name)
 {
 	m_name_id_mapping.set(i, name);
-	m_name_id_mapping_with_aliases.insert(std::make_pair(name, i));
+	m_name_id_mapping_with_aliases.emplace(name, i);
 }
 
 

@@ -336,22 +336,22 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 	irr::gui::IGUIFont* font = g_fontengine->getFont();
 
 	// Reorder elements by z_index
-	std::vector<size_t> ids;
+	std::vector<HudElement*> elems;
+	elems.reserve(player->maxHudId());
 
 	for (size_t i = 0; i != player->maxHudId(); i++) {
 		HudElement *e = player->getHud(i);
 		if (!e)
 			continue;
 
-		auto it = ids.begin();
-		while (it != ids.end() && player->getHud(*it)->z_index <= e->z_index)
+		auto it = elems.begin();
+		while (it != elems.end() && (*it)->z_index <= e->z_index)
 			++it;
 
-		ids.insert(it, i);
+		elems.insert(it, e);
 	}
 
-	for (size_t i : ids) {
-		HudElement *e = player->getHud(i);
+	for (HudElement *e : elems) {
 
 		v2s32 pos(floor(e->pos.X * (float) m_screensize.X + 0.5),
 				floor(e->pos.Y * (float) m_screensize.Y + 0.5));
@@ -522,8 +522,8 @@ void Hud::drawLuaElements(const v3s16 &camera_offset)
 				client->getMinimap()->drawMinimap(rect);
 				break; }
 			default:
-				infostream << "Hud::drawLuaElements: ignoring drawform " << e->type <<
-					" of hud element ID " << i << " due to unrecognized type" << std::endl;
+				infostream << "Hud::drawLuaElements: ignoring drawform " << e->type
+					<< " due to unrecognized type" << std::endl;
 		}
 	}
 }
@@ -945,10 +945,16 @@ void drawItemStack(
 		return;
 	}
 
-	const ItemDefinition &def = item.getDefinition(client->idef());
-	ItemMesh *imesh = client->idef()->getWieldMesh(def.name, client);
+	const static thread_local bool enable_animations =
+		g_settings->getBool("inventory_items_animations");
 
-	if (imesh && imesh->mesh) {
+	const ItemDefinition &def = item.getDefinition(client->idef());
+
+	// Render as mesh if animated or no inventory image
+	if ((enable_animations && rotation_kind < IT_ROT_NONE) || def.inventory_image.empty()) {
+		ItemMesh *imesh = client->idef()->getWieldMesh(def.name, client);
+		if (!imesh || !imesh->mesh)
+			return;
 		scene::IMesh *mesh = imesh->mesh;
 		driver->clearBuffers(video::ECBF_DEPTH);
 		s32 delta = 0;
@@ -991,9 +997,6 @@ void drawItemStack(
 
 		core::matrix4 matrix;
 		matrix.makeIdentity();
-
-		static thread_local bool enable_animations =
-			g_settings->getBool("inventory_items_animations");
 
 		if (enable_animations) {
 			float timer_f = (float) delta / 5000.f;
@@ -1039,16 +1042,27 @@ void drawItemStack(
 		driver->setTransform(video::ETS_VIEW, oldViewMat);
 		driver->setTransform(video::ETS_PROJECTION, oldProjMat);
 		driver->setViewPort(oldViewPort);
+	} else { // Otherwise just draw as 2D
+		video::ITexture *texture = client->idef()->getInventoryTexture(def.name, client);
+		if (!texture)
+			return;
+		video::SColor color =
+			client->idef()->getItemstackColor(item, client);
+		const video::SColor colors[] = { color, color, color, color };
 
-		// draw the inventory_overlay
-		if (def.type == ITEM_NODE && def.inventory_image.empty() &&
-				!def.inventory_overlay.empty()) {
-			ITextureSource *tsrc = client->getTextureSource();
-			video::ITexture *overlay_texture = tsrc->getTexture(def.inventory_overlay);
-			core::dimension2d<u32> dimens = overlay_texture->getOriginalSize();
-			core::rect<s32> srcrect(0, 0, dimens.Width, dimens.Height);
-			draw2DImageFilterScaled(driver, overlay_texture, rect, srcrect, clip, 0, true);
-		}
+		draw2DImageFilterScaled(driver, texture, rect,
+			core::rect<s32>({0, 0}, core::dimension2di(texture->getOriginalSize())),
+			clip, colors, true);
+	}
+
+	// draw the inventory_overlay
+	if (def.type == ITEM_NODE && def.inventory_image.empty() &&
+			!def.inventory_overlay.empty()) {
+		ITextureSource *tsrc = client->getTextureSource();
+		video::ITexture *overlay_texture = tsrc->getTexture(def.inventory_overlay);
+		core::dimension2d<u32> dimens = overlay_texture->getOriginalSize();
+		core::rect<s32> srcrect(0, 0, dimens.Width, dimens.Height);
+		draw2DImageFilterScaled(driver, overlay_texture, rect, srcrect, clip, 0, true);
 	}
 
 	if (def.type == ITEM_TOOL && item.wear != 0) {
