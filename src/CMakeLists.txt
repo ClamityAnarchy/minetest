@@ -146,7 +146,17 @@ option(ENABLE_POSTGRESQL "Enable PostgreSQL backend" TRUE)
 set(USE_POSTGRESQL FALSE)
 
 if(ENABLE_POSTGRESQL)
-	find_package("PostgreSQL")
+	if(CMAKE_VERSION VERSION_LESS "3.20")
+		find_package(PostgreSQL QUIET)
+		# Before CMake 3.20 FindPostgreSQL.cmake always looked for server includes
+		# but we don't need them, so continue anyway if only those are missing.
+		if(PostgreSQL_INCLUDE_DIR AND PostgreSQL_LIBRARY)
+			set(PostgreSQL_FOUND TRUE)
+			set(PostgreSQL_INCLUDE_DIRS ${PostgreSQL_INCLUDE_DIR})
+		endif()
+	else()
+		find_package(PostgreSQL)
+	endif()
 
 	if(PostgreSQL_FOUND)
 		set(USE_POSTGRESQL TRUE)
@@ -512,6 +522,10 @@ include_directories(
 	${X11_INCLUDE_DIR}
 	${PROJECT_SOURCE_DIR}/script
 )
+
+if(ENABLE_GLES)
+	include_directories(${OPENGLES2_INCLUDE_DIR} ${EGL_INCLUDE_DIR})
+endif()
 
 if(USE_GETTEXT)
 	include_directories(${GETTEXT_INCLUDE_DIR})
